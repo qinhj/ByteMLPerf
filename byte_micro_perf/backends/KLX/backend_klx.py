@@ -86,7 +86,7 @@ OP_MAPPING = {
 
 
 
-class BackendXPU(Backend):
+class BackendKLX(Backend):
     def __init__(self):
         super().__init__()
 
