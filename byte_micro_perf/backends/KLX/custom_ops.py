@@ -103,7 +103,7 @@ class XPUGemmFP8Op(GemmFP8Op):
     def __init__(self, args_dict, backend, *args, **kwargs):
         if deep_gemm is None:
             raise ImportError("deep_gemm is not available, please install it first.")
-            
+
         super().__init__(args_dict, backend, *args, **kwargs)
 
         self._custom_run = True
@@ -113,8 +113,8 @@ class XPUGemmFP8Op(GemmFP8Op):
     def gemm_fp8_run(self):
         def test_func():
             x_fp8, y_fp8, out = construct(
-                self.M, self.K, self.N, 
-                self.quant_group_size, 
+                self.M, self.K, self.N,
+                self.quant_group_size,
                 self.backend.get_torch_device_name()
             )
             deep_gemm.gemm_fp8_fp8_bf16_nt(x_fp8, y_fp8, out)
@@ -138,8 +138,8 @@ class XPUGroupGemmFP8Op(GroupGemmFP8Op):
 
         def test_func_contiguous():
             x_fp8, y_fp8, out = construct_grouped(
-                self.num_groups, self.M, self.K, self.N, False, 
-                self.quant_group_size, 
+                self.num_groups, self.M, self.K, self.N, False,
+                self.quant_group_size,
                 self.backend.get_torch_device_name()
             )
             m_indices = torch.arange(0, self.num_groups, device='cuda', dtype=torch.int)
@@ -148,8 +148,8 @@ class XPUGroupGemmFP8Op(GroupGemmFP8Op):
 
         def test_func_masked():
             x_fp8, y_fp8, out = construct_grouped(
-                self.num_groups, self.M, self.K, self.N, True, 
-                self.quant_group_size, 
+                self.num_groups, self.M, self.K, self.N, True,
+                self.quant_group_size,
                 self.backend.get_torch_device_name()
             )
             masked_m = torch.ones((self.num_groups, ), device='cuda', dtype=torch.int) * self.M
@@ -193,7 +193,7 @@ class XPUFlashAttentionOp(FlashAttentionOp):
     def flash_attention_run(self, tensor_mapping):
         q = tensor_mapping["q"]
         k = tensor_mapping["k"]
-        v = tensor_mapping["v"]        
+        v = tensor_mapping["v"]
         return flash_attn_func(q, k, v, causal=self.is_causal)
 
 
@@ -209,7 +209,7 @@ except ImportError:
 
 class XPUFlashMLAOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        if flash_mla is None or flash_attn_interface is None:
+        if flash_mla is None or flash_attn is None:
             raise ImportError("flash_mla or flash_attn is not available, please install it first.")
 
         super().__init__(args_dict, backend, *args, **kwargs)
@@ -277,7 +277,7 @@ class XPUFlashMLAOp(BasicOp):
                     shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.qk_dim_size],
                     dtype=self.torch_dtype,
                     device=self.backend.get_torch_device_name()
-                ), 
+                ),
                 "k": OpTensorInfo(
                     shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.qk_dim_size],
                     dtype=self.torch_dtype,
@@ -315,9 +315,9 @@ class XPUFlashMLAOp(BasicOp):
         # decode, absorb weight, use flash_mla
         elif self.phase == "decode":
             self.cache_seqlens = torch.full(
-                (self.batch_size,), 
-                self.kv_seq_len, 
-                dtype=torch.int32, 
+                (self.batch_size,),
+                self.kv_seq_len,
+                dtype=torch.int32,
                 device=self.backend.get_torch_device_name()
             )
             self.total_seqlens = self.cache_seqlens.sum().item()
@@ -354,7 +354,7 @@ class XPUFlashMLAOp(BasicOp):
                     shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.qk_dim_size],
                     dtype=self.torch_dtype,
                     device=self.backend.get_torch_device_name()
-                ), 
+                ),
                 "blocked_k": OpTensorInfo(
                     shape=[self.block_table.numel(), self.block_size, self.kv_head_num, self.qk_dim_size],
                     dtype=self.torch_dtype,
@@ -447,4 +447,4 @@ class XPUFlashMLAOp(BasicOp):
                 causal=self.is_causal,
             )
             return return_vals
-        
+
