@@ -33,24 +33,24 @@ class LayerNormOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ), 
                 "weight": OpTensorInfo(
                     shape=[self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
                 "bias": OpTensorInfo(
                     shape=[self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
             }
             self.output_tensor_info = {
                 "dst": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
             }
         else:
@@ -99,19 +99,19 @@ class ReduceMaxOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
             }
             self.output_tensor_info = {
                 "max_value": OpTensorInfo(
                     shape=[self.batch_size, 1],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
                 "max_indices": OpTensorInfo(
                     shape=[self.batch_size, 1],
                     dtype=torch.int32,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
         else:
@@ -156,19 +156,19 @@ class ReduceMinOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
             }
             self.output_tensor_info = {
                 "min_value": OpTensorInfo(
                     shape=[self.batch_size, 1],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
                 "min_indices": OpTensorInfo(
                     shape=[self.batch_size, 1],
                     dtype=torch.int32,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
         else:
@@ -211,14 +211,14 @@ class ReduceSumOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ),
             }
             self.output_tensor_info = {
                 "sum": OpTensorInfo(
                     shape=[self.batch_size, 1],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
         else:
@@ -263,14 +263,14 @@ class SoftmaxOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
             self.output_tensor_info = {
                 "dst": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
         elif self.arg_type == "llm":
@@ -287,14 +287,14 @@ class SoftmaxOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.head_num, self.q_seq_len, self.kv_seq_len],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
             self.output_tensor_info = {
                 "dst": OpTensorInfo(
                     shape=[self.batch_size, self.head_num, self.q_seq_len, self.kv_seq_len],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
         else:
@@ -340,19 +340,19 @@ class TopkOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
             self.output_tensor_info = {
                 "value": OpTensorInfo(
                     shape=[self.batch_size, self.k],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 ), 
                 "indice": OpTensorInfo(
                     shape=[self.batch_size, self.k],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_torch_device_name(),
+                    device=self.backend.get_device(),
                 )
             }
 

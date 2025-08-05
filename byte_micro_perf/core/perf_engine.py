@@ -22,17 +22,11 @@ import pathlib
 import itertools
 import jsonlines
 import shutil
-import psutil
-from datetime import timedelta
 
 from typing import Any, Dict, List
 import itertools
 from collections import namedtuple
 
-import traceback
-import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 MICRO_PERF_DIR = FILE_DIR.parent
@@ -40,7 +34,26 @@ MICRO_PERF_DIR = FILE_DIR.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger, setup_logger
+from core.creators import create_backend
 from core.scheduler import Scheduler
+
+                
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--hardware_type", type=str)
+    parser.add_argument("--task_dir", type=str)
+    parser.add_argument("--task", type=str)
+    parser.add_argument("--device", type=str)
+    parser.add_argument("--numa_world_size", type=int, default=1)
+    parser.add_argument("--numa_rank", type=int, default=0)
+    parser.add_argument("--disable_parallel", action="store_true")
+    parser.add_argument("--disable_profiling", action="store_true")
+    parser.add_argument("--report_dir", type=str)
+    parser.add_argument("--log_level", type=str, default="INFO")
+    args = parser.parse_args()
+    setup_logger(args.log_level)
+    return args
 
 
 def parse_task(task_dir, task):
@@ -78,143 +91,84 @@ def parse_task(task_dir, task):
 
 
 
-def engine_run(rank, *args):
-    world_size, queue_instance, configs = args
-    _ = queue_instance.get()
-
-
-    node_world_size = configs.node_world_size
-    node_rank = configs.node_rank
-
-    numa_world_size = world_size
-    numa_rank = rank
-
-    all_process_size = node_world_size * numa_world_size
-    all_process_rank = node_rank * numa_world_size + numa_rank
-
-    os.environ['MASTER_PORT'] = os.environ['GLOO_PORT']
-    try:
-        dist.init_process_group(
-            backend="gloo", 
-            world_size=all_process_size,
-            rank=all_process_rank, 
-            timeout=timedelta(seconds=1800)
-        )
-        data = torch.ones(1)
-        dist.all_reduce(data)
-    except Exception as e:
-        traceback.print_exc()
+if __name__ == "__main__":
+    args = parse_args()
+    task_cases = parse_task(args.task_dir, args.task)
+    if len(task_cases) == 0:
+        logger.error("No task found")
         sys.exit(1)
+
+    scheduler = Scheduler(args)
+    result_list = scheduler.run(task_cases)
+
+
+    if args.numa_rank == 0:
+        if len(result_list) == 0:
+            logger.error("No result found")
+            sys.exit(1)
+
+        sku_name = result_list[0]["sku_name"]
+        report_dir = pathlib.Path(args.report_dir).absolute()
+        backend_dir = report_dir.joinpath(args.hardware_type)
+        sku_dir = backend_dir.joinpath(sku_name)
+        op_dir = sku_dir.joinpath(args.task)
+        if op_dir.exists():
+            shutil.rmtree(op_dir)
+        op_dir.mkdir(parents=True)
+
+        # grouped by arg_type
+        result_mapping = {}
+        for result in result_list:
+            # check arguments and targets
+            arguments = result.get("arguments", {})
+            targets = result.get("targets", {})
+            if arguments == {} or targets == {}:
+                continue
+            
+            arg_type = arguments.get("arg_type", "default")
+            if arg_type not in result_mapping:
+                result_mapping[arg_type] = {}
+
+            provider = result["provider"]
+            world_size = arguments.get("world_size", 1)
+            dtype = arguments["dtype"]
+
+            key = (provider, world_size, dtype)
+            if key not in result_mapping[arg_type]:
+                result_mapping[arg_type][key] = []
+            result_mapping[arg_type][key].append(result)
         
 
-    if numa_rank == 0:
-        print("*" * 100)
-        print(f"node_world_size: {node_world_size}")
-        print(f"numa_world_size: {numa_world_size}")
-        print(f"all_process_size: {all_process_size}")
-        print(f"check gloo connnection: {data}")
-        print("*" * 100)
+        for arg_type in result_mapping:
+            for key in result_mapping[arg_type]:
+                target_folder = op_dir.joinpath(arg_type)
+                target_folder.mkdir(parents=True, exist_ok=True)
 
+                provider, world_size, dtype = key
 
-    configs.node_world_size = node_world_size
-    configs.node_rank = node_rank
+                if world_size == 1:
+                    file_name = f"{provider}-{dtype}"
+                else:
+                    file_name = f"{provider}-group{world_size}-{dtype}"
 
-    configs.numa_world_size = numa_world_size
-    configs.numa_rank = numa_rank
+                result_list = result_mapping[arg_type][key]
+                jsonl_file_path = target_folder.joinpath(file_name + ".jsonl")
+                with jsonlines.open(jsonl_file_path, "w") as writer:
+                    for result in result_list:
+                        writer.write(result)
 
-    configs.all_process_size = all_process_size
-    configs.all_process_rank = all_process_rank
+                keys = ["task_name"]
+                keys.extend(list(result_list[0]["arguments"].keys()))
+                keys.extend(list(result_list[0]["targets"].keys()))
 
-    try:
-        scheduler = Scheduler(configs)
-    except Exception as e:
-        traceback.print_exc()
-        sys.exit(-1)
+                csv_file_path = target_folder.joinpath(file_name + ".csv")
+                with open(csv_file_path, "w") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(keys)
+                    for result in result_list:
+                        row = [args.task]
+                        row.extend(list(result["arguments"].values()))
+                        row.extend(list(result["targets"].values()))
+                        writer.writerow(row)
 
-
-    
-
-    for task in configs.task.split(","):
-        try:
-            task_cases = parse_task(configs.task_dir, task)
-            if len(task_cases) == 0:
-                logger.error(f"{task} has not item")
-                continue
-            if scheduler.prepare_task(task) is not None:
-                result_list = scheduler.run(task_cases)
-            dist.barrier()
-
-            if configs.numa_rank == 0:
-                if len(result_list) == 0:
-                    logger.error("No result found")
-                    sys.exit(1)
-
-                sku_name = result_list[0]["sku_name"]
-                report_dir = pathlib.Path(configs.report_dir).absolute()
-                backend_dir = report_dir.joinpath(configs.hardware_type)
-                sku_dir = backend_dir.joinpath(sku_name)
-                op_dir = sku_dir.joinpath(task)
-                if op_dir.exists():
-                    shutil.rmtree(op_dir)
-                op_dir.mkdir(parents=True)
-
-                # grouped by arg_type
-                result_mapping = {}
-                for result in result_list:
-                    # check arguments and targets
-                    arguments = result.get("arguments", {})
-                    targets = result.get("targets", {})
-                    if arguments == {} or targets == {}:
-                        continue
-                    
-                    arg_type = arguments.get("arg_type", "default")
-                    if arg_type not in result_mapping:
-                        result_mapping[arg_type] = {}
-
-                    provider = result["provider"]
-                    world_size = arguments.get("world_size", 1)
-                    dtype = arguments["dtype"]
-
-                    key = (provider, world_size, dtype)
-                    if key not in result_mapping[arg_type]:
-                        result_mapping[arg_type][key] = []
-                    result_mapping[arg_type][key].append(result)
-                
-
-                for arg_type in result_mapping:
-                    for key in result_mapping[arg_type]:
-                        target_folder = op_dir.joinpath(arg_type)
-                        target_folder.mkdir(parents=True, exist_ok=True)
-
-                        provider, world_size, dtype = key
-
-                        if world_size == 1:
-                            file_name = f"{provider}-{dtype}"
-                        else:
-                            file_name = f"{provider}-group{world_size}-{dtype}"
-
-                        result_list = result_mapping[arg_type][key]
-                        jsonl_file_path = target_folder.joinpath(file_name + ".jsonl")
-                        with jsonlines.open(jsonl_file_path, "w") as writer:
-                            for result in result_list:
-                                writer.write(result)
-
-                        keys = ["task_name"]
-                        keys.extend(list(result_list[0]["arguments"].keys()))
-                        keys.extend(list(result_list[0]["targets"].keys()))
-
-                        csv_file_path = target_folder.joinpath(file_name + ".csv")
-                        with open(csv_file_path, "w") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(keys)
-                            for result in result_list:
-                                row = [task]
-                                row.extend(list(result["arguments"].values()))
-                                row.extend(list(result["targets"].values()))
-                                writer.writerow(row)
-
-        except Exception as e:
-            traceback.print_exc()
-            continue
-
-    dist.destroy_process_group()
+        

@@ -44,14 +44,14 @@ class CastOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.src_dtype,
-                device=self.backend.get_torch_device_name(),
+                device=self.backend.get_device(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.dst_dtype,
-                device=self.backend.get_torch_device_name(),
+                device=self.backend.get_device(),
             )
         }
 
@@ -97,14 +97,14 @@ class CosOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_torch_device_name(),
+                device=self.backend.get_device(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_torch_device_name(),
+                device=self.backend.get_device(),
             )
         }
         
